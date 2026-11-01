@@ -541,6 +541,13 @@ impl TerminalView {
         if !k.key.starts_with("shift") && !k.key.starts_with("control") && !k.key.starts_with("alt") {
             self.grid.borrow_mut().vt.clear_selection();
         }
+        let lines = page_scroll_lines(&self.grid.borrow().vt, ev);
+        if let Some(lines) = lines {
+            self.grid.borrow_mut().vt.scroll_viewport(lines);
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
         let bytes = key_bytes(&mut self.grid.borrow_mut().vt, ev);
         if let Some(bytes) = bytes {
             self.send(&bytes);
@@ -888,6 +895,25 @@ fn paste_image_fallback(vt: &mut vt::Vt, text: Option<&str>) -> Option<Vec<u8>> 
     }
     let keystroke = Keystroke::parse("ctrl-v").ok()?;
     key_bytes(vt, &KeyDownEvent { keystroke, is_held: false, prefer_character_input: false })
+}
+
+/// One viewport of scrollback for plain Page Up/Down, or nothing when the
+/// program should receive the key. Ctrl+Page stays a tab shortcut.
+fn page_scroll_lines(vt: &vt::Vt, ev: &KeyDownEvent) -> Option<isize> {
+    let k = &ev.keystroke;
+    let m = k.modifiers;
+    if m.control || m.alt || m.shift || m.platform || m.function {
+        return None;
+    }
+    let dir: isize = match k.key.as_str() {
+        "pageup" => -1,
+        "pagedown" => 1,
+        _ => return None,
+    };
+    if !vt.plain_page_keys_scroll() {
+        return None;
+    }
+    Some(dir * vt.rows.max(1) as isize)
 }
 
 /// What a key press sends to the program: the key described to libghostty,
@@ -1771,6 +1797,25 @@ mod tests {
             is_held: false,
             prefer_character_input: false,
         }
+    }
+
+    #[test]
+    fn plain_page_keys_scroll_a_shell_and_reach_full_screen_apps() {
+        let mut vt = Vt::new(20, 8);
+        let page = |vt: &Vt, key| super::page_scroll_lines(vt, &press(key, None));
+        assert_eq!(page(&vt, "pageup"), Some(-8));
+        assert_eq!(page(&vt, "pagedown"), Some(8));
+        assert_eq!(page(&vt, "shift-pageup"), None);
+        assert_eq!(page(&vt, "ctrl-pagedown"), None);
+        vt.write(b"\x1b[?1049h");
+        assert_eq!(page(&vt, "pageup"), None);
+        vt.write(b"\x1b[?1049l\x1b[?1000h");
+        assert!(vt.mouse_tracking());
+        assert_eq!(page(&vt, "pageup"), None);
+        vt.write(b"\x1b[?1000l\x1b[?1h");
+        assert_eq!(page(&vt, "pageup"), None);
+        vt.write(b"\x1b[?2004h");
+        assert_eq!(page(&vt, "pageup"), Some(-8));
     }
 
     #[test]
