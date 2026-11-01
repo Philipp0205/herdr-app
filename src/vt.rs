@@ -593,6 +593,7 @@ unsafe extern "C" fn on_title(_t: GhosttyTerminal, userdata: *mut c_void) {
 
 const SYNC_OUTPUT: GhosttyMode = 2026;
 const BRACKETED_PASTE: GhosttyMode = 2004;
+const APPLICATION_CURSOR: GhosttyMode = 1; // DECCKM
 const MAX_HOLD: Duration = Duration::from_millis(1000);
 const SCROLLBACK_MAX_LINES: usize = 10_000;
 // Bound memory per terminal; wide or heavily styled rows may hit this first.
@@ -1219,6 +1220,13 @@ impl Vt {
         let mut screen: GhosttyTerminalScreen = GHOSTTY_TERMINAL_SCREEN_PRIMARY;
         unsafe { ghostty_terminal_get(self.term, GHOSTTY_TERMINAL_DATA_ACTIVE_SCREEN, &mut screen as *mut _ as *mut c_void) };
         screen == GHOSTTY_TERMINAL_SCREEN_ALTERNATE
+    }
+
+    /// Page Up/Down scroll Herdr's history unless the program owns those keys.
+    /// Same rule as the terminal app: not the alternate screen, not mouse
+    /// tracking, and not application cursor keys without bracketed paste.
+    pub fn plain_page_keys_scroll(&self) -> bool {
+        !self.alt_screen() && !self.mouse_tracking() && (!self.mode(APPLICATION_CURSOR) || self.mode(BRACKETED_PASTE))
     }
 
     pub fn scroll_viewport(&mut self, delta: isize) {

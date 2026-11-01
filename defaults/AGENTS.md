@@ -493,6 +493,7 @@ the build doesn't do.
 - On macOS, shifted punctuation shortcuts accept both spellings from the
   current layout: `cmd-shift-]` and `cmd-}` match the same US-layout keypress.
   Existing `keys.json` files don't need to change.
+- Plain Page Up and Page Down scroll the focused pane by one screen when the program is not using those keys (a full-screen app, or one tracking the mouse, keeps them). Ctrl+Page Up and Ctrl+Page Down still switch tabs. Shift+Page Up and Shift+Page Down go to the program.
 - Terminal keys honor the program's negotiated Kitty mode, including on Windows.
 - Windows terminal Escape stays separate from the following key.
 
